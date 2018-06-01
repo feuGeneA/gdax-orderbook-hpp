@@ -1,0 +1,7 @@
+A copy of the GDAX order book for the product given during construction, exposed as two maps, one for bids and one for offers, each mapping price levels to order quantities, continually updated in real time via the `level2` channel of the Websocket feed of the GDAX API.
+
+Spawns two threads, one to receive updates from the GDAX WebSocket Feed and store them in an internal queue, and another to pull updates out of that queue and store them in the maps.
+
+Queue-then-map approach chosen based on the assumption that a queue is faster than a map, so updates can be pulled off the wire as fast as possible, with neither map insertion latency nor map garbage collection slowing down the reception pipeline.  (Future improvement: profile queue usage; if consistently empty, consider going straight from WebSocket to map; if consistenly used, consider allowing configuration of queue size in order to avoid overflow.)
+
+To ensure high performance, implemented using concurrent data structures from libcds.  The internal queue is a cds::container::RWQueue, whose doc says "The queue has two different locks: one for reading and one for writing. Therefore, one writer and one reader can simultaneously access to the queue."  The use case in this implementation has exactly one reader thread and one writer thread.  The price->quantity maps are instances of cds::container::SkipListMap, whose doc says it is lock-free.
