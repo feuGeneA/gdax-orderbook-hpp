@@ -6,6 +6,8 @@ INCDIRS += -I ./dependencies/websocketpp-0.7.0
 CDSLIBDIR = ./dependencies/libcds-2.3.2/build-release/bin
 
 LIBS = -lboost_system # needed for boost::asio, used by websocketpp
+                      # according to https://groups.google.com/forum/#!topic/websocketpp/Ou30S05FKoM
+                      # one could use standalone Asio from think-async.com
 LIBS += -lpthread
 LIBS += -lssl # needed for websocketpp's TLS support (req'd by GDAX)
 LIBS += -lcrypto # needed for websocketpp's TLS support (req'd by GDAX)
