@@ -9,8 +9,8 @@ int main(int argc, char* argv[]) {
 
     std::cout << "best bid: Ξ" << book.bids.begin()->second << " @ $"
                                << book.bids.begin()->first << "/Ξ ; ";
-    std::cout << "best offer: Ξ" << book.asks.begin()->second << " @ $"
-                                 << book.asks.begin()->first << "/Ξ"
+    std::cout << "best offer: Ξ" << book.offers.begin()->second << " @ $"
+                                 << book.offers.begin()->first << "/Ξ"
                                  << std::endl;
 
     size_t secondsToSleep = 5;
@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "best bid: Ξ" << book.bids.begin()->second << " @ $"
                                << book.bids.begin()->first << "/Ξ ; ";
-    std::cout << "best offer: Ξ" << book.asks.begin()->second << " @ $"
-                                 << book.asks.begin()->first << "/Ξ"
+    std::cout << "best offer: Ξ" << book.offers.begin()->second << " @ $"
+                                 << book.offers.begin()->first << "/Ξ"
                                  << std::endl;
 }

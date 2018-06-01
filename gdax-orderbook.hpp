@@ -18,7 +18,7 @@
 
 /**
  * A copy of the GDAX order book for the product given during construction,
- * exposed as two maps, one for bids and one for asks, each mapping price
+ * exposed as two maps, one for bids and one for offers, each mapping price
  * levels to order quantities, continually updated in real time via the
  * `level2` channel of the Websocket feed of the GDAX API.
  *
@@ -70,7 +70,7 @@ public:
 
     using Price = double;
     using Size = double;
-    using asks_map_t = cds::container::SkipListMap<cds::gc::HP, Price, Size>;
+    using offers_map_t = cds::container::SkipListMap<cds::gc::HP, Price, Size>;
     using bids_map_t =
         cds::container::SkipListMap<
             cds::gc::HP,
@@ -81,7 +81,7 @@ public:
                 cds::opt::less<std::greater<Price>>>::type>;
     // *map_t::get(Price) returns an std::pair<Price, Size>*
     bids_map_t bids;
-    asks_map_t asks;
+    offers_map_t offers;
 
     ~GDAXOrderBook()
     {
@@ -203,7 +203,7 @@ private:
 
     /**
      * Continually dequeues order book updates from `m_queue` (busy-waiting if
-     * there aren't any), and moves those updates to `bids` and `asks`, until
+     * there aren't any), and moves those updates to `bids` and `offers`, until
      * `m_stopUpdating` is true.
      */
     void processUpdates()
@@ -228,7 +228,7 @@ private:
             if ( type == "snapshot" )
             {
                 parseSnapshotHalf(doc, "bids", bids);
-                parseSnapshotHalf(doc, "asks", asks);
+                parseSnapshotHalf(doc, "asks", offers);
                 m_bookInitialized = true;
             }
             else if ( type == "l2update" )
@@ -245,7 +245,7 @@ private:
                     }
                     else
                     {
-                        parseUpdate(price, size, asks);
+                        parseUpdate(price, size, offers);
                     }
                 }
             }
@@ -253,12 +253,12 @@ private:
     }
 
     template<typename map_t>
-    void parseSnapshotHalf(rapidjson::Document const& doc, std::string const& bidsOrAsks, map_t & map)
+    void parseSnapshotHalf(rapidjson::Document const& doc, std::string const& bidsOrOffers, map_t & map)
     {
-        for (auto j = 0 ; j < doc[bidsOrAsks.c_str()].Size() ; ++j)
+        for (auto j = 0 ; j < doc[bidsOrOffers.c_str()].Size() ; ++j)
         {
-            Price price = std::stod(doc[bidsOrAsks.c_str()][j][0].GetString());
-            Size   size = std::stod(doc[bidsOrAsks.c_str()][j][1].GetString());
+            Price price = std::stod(doc[bidsOrOffers.c_str()][j][0].GetString());
+            Size   size = std::stod(doc[bidsOrOffers.c_str()][j][1].GetString());
 
             map.insert(price, size);
         }
