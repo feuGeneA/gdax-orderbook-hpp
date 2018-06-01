@@ -1,6 +1,7 @@
 #ifndef GDAX_ORDERBOOK_HPP
 #define GDAX_ORDERBOOK_HPP
 
+#include <functional>
 #include <iostream>
 #include <string>
 
@@ -69,10 +70,18 @@ public:
 
     using Price = double;
     using Size = double;
-    using map_t = cds::container::SkipListMap<cds::gc::HP, Price, Size>;
-    // map_t::get(Price) returns an std::pair<Price, Size>*
-    map_t bids;
-    map_t asks;
+    using asks_map_t = cds::container::SkipListMap<cds::gc::HP, Price, Size>;
+    using bids_map_t =
+        cds::container::SkipListMap<
+            cds::gc::HP,
+            Price,
+            Size,
+            // reverse map ordering so best (highest) bid is at begin()
+            typename cds::container::skip_list::make_traits<
+                cds::opt::less<std::greater<Price>>>::type>;
+    // *map_t::get(Price) returns an std::pair<Price, Size>*
+    bids_map_t bids;
+    asks_map_t asks;
 
     ~GDAXOrderBook()
     {
@@ -218,18 +227,8 @@ private:
             std::string type(doc["type"].GetString());
             if ( type == "snapshot" )
             {
-                for (auto i : { std::make_pair("bids", &bids),
-                                std::make_pair("asks", &asks)  } )
-                {
-                    for (auto j = 0 ; j < doc[i.first].Size() ; ++j)
-                    {
-                        Price price = stod(doc[i.first][j][0].GetString());
-                        Size   size = stod(doc[i.first][j][1].GetString());
-
-                        i.second->insert(price, size);
-                    }
-                }
-
+                parseSnapshotHalf(doc, "bids", bids);
+                parseSnapshotHalf(doc, "asks", asks);
                 m_bookInitialized = true;
             }
             else if ( type == "l2update" )
@@ -240,21 +239,45 @@ private:
                                 price    (doc["changes"][i][1].GetString()),
                                 size     (doc["changes"][i][2].GetString());
 
-                    map_t * map = buyOrSell=="buy" ? &bids : &asks;
-
-                    if (stod(size) == 0) { map->erase(stod(price)); }
+                    if ( buyOrSell == "buy" )
+                    {
+                        parseUpdate(price, size, bids);
+                    }
                     else
                     {
-                        map->update(
-                            stod(price),
-                            [&doc, size](bool & bNew,
-                                       std::pair<const Price, Size> & pair)
-                            {
-                                pair.second = stod(size);
-                            });
+                        parseUpdate(price, size, asks);
                     }
                 }
             }
+        }
+    }
+
+    template<typename map_t>
+    void parseSnapshotHalf(rapidjson::Document const& doc, std::string const& bidsOrAsks, map_t & map)
+    {
+        for (auto j = 0 ; j < doc[bidsOrAsks.c_str()].Size() ; ++j)
+        {
+            Price price = std::stod(doc[bidsOrAsks.c_str()][j][0].GetString());
+            Size   size = std::stod(doc[bidsOrAsks.c_str()][j][1].GetString());
+
+            map.insert(price, size);
+        }
+    }
+
+    template<typename map_t>
+    void parseUpdate(std::string const& price, std::string const& size, map_t & map)
+    {
+        using std::stod;
+        if (stod(size) == 0) { map.erase(stod(price)); }
+        else
+        {
+            map.update(
+                stod(price),
+                [size](bool & bNew,
+                       std::pair<const Price, Size> & pair)
+                {
+                    pair.second = stod(size);
+                });
         }
     }
 };
