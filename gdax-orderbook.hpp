@@ -212,7 +212,7 @@ private:
         if (cds::threading::Manager::isThreadAttached() == false)
             cds::threading::Manager::attachThread();
 
-        rapidjson::Document doc;
+        rapidjson::Document json;
         std::string update;
 
         while ( true ) 
@@ -222,24 +222,24 @@ private:
             bool queueEmpty = ! m_queue.dequeue(update);
             if (queueEmpty) continue;
 
-            doc.Parse(update.c_str());
+            json.Parse(update.c_str());
 
             using std::stod;
 
-            std::string type(doc["type"].GetString());
+            std::string type(json["type"].GetString());
             if ( type == "snapshot" )
             {
-                parseSnapshotHalf(doc, "bids", bids);
-                parseSnapshotHalf(doc, "asks", offers);
+                parseSnapshotHalf(json, "bids", bids);
+                parseSnapshotHalf(json, "asks", offers);
                 m_bookInitialized = true;
             }
             else if ( type == "l2update" )
             {
-                for (auto i = 0 ; i < doc["changes"].Size() ; ++i)
+                for (auto i = 0 ; i < json["changes"].Size() ; ++i)
                 {
-                    const char* buyOrSell = doc["changes"][i][0].GetString(),
-                              * price     = doc["changes"][i][1].GetString(),
-                              * size      = doc["changes"][i][2].GetString();
+                    const char* buyOrSell = json["changes"][i][0].GetString(),
+                              * price     = json["changes"][i][1].GetString(),
+                              * size      = json["changes"][i][2].GetString();
 
                     if ( strcmp(buyOrSell, "buy") == 0 )
                     {
@@ -255,12 +255,12 @@ private:
     }
 
     template<typename map_t>
-    void parseSnapshotHalf(rapidjson::Document const& doc, const char* bidsOrOffers, map_t & map)
+    void parseSnapshotHalf(rapidjson::Document const& json, const char* bidsOrOffers, map_t & map)
     {
-        for (auto j = 0 ; j < doc[bidsOrOffers].Size() ; ++j)
+        for (auto j = 0 ; j < json[bidsOrOffers].Size() ; ++j)
         {
-            Price price = std::stod(doc[bidsOrOffers][j][0].GetString());
-            Size   size = std::stod(doc[bidsOrOffers][j][1].GetString());
+            Price price = std::stod(json[bidsOrOffers][j][0].GetString());
+            Size   size = std::stod(json[bidsOrOffers][j][1].GetString());
 
             map.insert(price, size);
         }
