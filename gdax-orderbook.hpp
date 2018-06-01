@@ -1,6 +1,7 @@
 #ifndef GDAX_ORDERBOOK_HPP
 #define GDAX_ORDERBOOK_HPP
 
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <string>
@@ -211,15 +212,16 @@ private:
         if (cds::threading::Manager::isThreadAttached() == false)
             cds::threading::Manager::attachThread();
 
+        rapidjson::Document doc;
+        std::string update;
+
         while ( true ) 
         {
             if ( m_stopUpdating ) return;
 
-            std::string update;
             bool queueEmpty = ! m_queue.dequeue(update);
             if (queueEmpty) continue;
 
-            rapidjson::Document doc;
             doc.Parse(update.c_str());
 
             using std::stod;
@@ -235,11 +237,11 @@ private:
             {
                 for (auto i = 0 ; i < doc["changes"].Size() ; ++i)
                 {
-                    std::string buyOrSell(doc["changes"][i][0].GetString()),
-                                price    (doc["changes"][i][1].GetString()),
-                                size     (doc["changes"][i][2].GetString());
+                    const char* buyOrSell = doc["changes"][i][0].GetString(),
+                              * price     = doc["changes"][i][1].GetString(),
+                              * size      = doc["changes"][i][2].GetString();
 
-                    if ( buyOrSell == "buy" )
+                    if ( strcmp(buyOrSell, "buy") == 0 )
                     {
                         parseUpdate(price, size, bids);
                     }
@@ -253,19 +255,19 @@ private:
     }
 
     template<typename map_t>
-    void parseSnapshotHalf(rapidjson::Document const& doc, std::string const& bidsOrOffers, map_t & map)
+    void parseSnapshotHalf(rapidjson::Document const& doc, const char* bidsOrOffers, map_t & map)
     {
-        for (auto j = 0 ; j < doc[bidsOrOffers.c_str()].Size() ; ++j)
+        for (auto j = 0 ; j < doc[bidsOrOffers].Size() ; ++j)
         {
-            Price price = std::stod(doc[bidsOrOffers.c_str()][j][0].GetString());
-            Size   size = std::stod(doc[bidsOrOffers.c_str()][j][1].GetString());
+            Price price = std::stod(doc[bidsOrOffers][j][0].GetString());
+            Size   size = std::stod(doc[bidsOrOffers][j][1].GetString());
 
             map.insert(price, size);
         }
     }
 
     template<typename map_t>
-    void parseUpdate(std::string const& price, std::string const& size, map_t & map)
+    void parseUpdate(const char* price, const char* size, map_t & map)
     {
         using std::stod;
         if (stod(size) == 0) { map.erase(stod(price)); }
