@@ -120,6 +120,9 @@ private:
      */
     void receiveUpdates(std::string product)
     {
+        if (cds::threading::Manager::isThreadAttached() == false)
+            cds::threading::Manager::attachThread();
+
         try {
             m_client.clear_access_channels(websocketpp::log::alevel::all);
             m_client.set_access_channels(
@@ -178,9 +181,6 @@ private:
                         std::cerr << "error sending subscription: " +
                             errorCode.message() << std::endl;
                     }
-
-                    if (cds::threading::Manager::isThreadAttached() == false)
-                        cds::threading::Manager::attachThread();
                 });
 
             websocketpp::lib::error_code errorCode;
