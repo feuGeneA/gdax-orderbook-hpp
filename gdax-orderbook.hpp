@@ -86,8 +86,8 @@ public:
     ~GDAXOrderBook()
     {
         // tell threads we're terminating, and wait for them to finish
-        m_client.stop(); // signal to WebSocket thread
-        m_stopUpdating = true; // signal to book update thread
+        m_client.stop(); // signal to receiveUpdatesThread
+        m_stopUpdating = true; // signal to processUpdatesThread
         while ( processUpdatesThread.joinable()
              && receiveUpdatesThread.joinable() )
         {
