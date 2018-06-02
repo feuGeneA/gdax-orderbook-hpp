@@ -59,7 +59,7 @@ public:
             cds::threading::Manager::attachThread();
     }
 
-    GDAXOrderBook(const std::string product = "BTC-USD")
+    GDAXOrderBook(std::string const& product = "BTC-USD")
         : m_cdsGarbageCollector(67*2),
             // per SkipListMap doc, 67 hazard pointers per instance
           receiveUpdatesThread(&GDAXOrderBook::receiveUpdates, this, product),
@@ -129,7 +129,7 @@ private:
      * given product, installs a message handler which will receive updates
      * and enqueue them to m_queue, and starts the asio event loop.
      */
-    void receiveUpdates(std::string product)
+    void receiveUpdates(std::string const& product)
     {
         ensureThreadAttached();
 
@@ -184,7 +184,7 @@ private:
                 });
 
             m_client.set_open_handler(
-                [product, this](websocketpp::connection_hdl handle)
+                [&product, this](websocketpp::connection_hdl handle)
                 {
                     // subscribe to updates to product's order book
                     websocketpp::lib::error_code errorCode;
@@ -230,26 +230,27 @@ private:
 
         rapidjson::Document json;
         std::string update;
+        bool queueEmpty;
 
         while ( true ) 
         {
             if ( m_stopUpdating ) return;
 
-            bool queueEmpty = ! m_queue.dequeue(update);
+            queueEmpty = ! m_queue.dequeue(update);
             if (queueEmpty) continue;
 
             json.Parse(update.c_str());
 
             using std::stod;
 
-            std::string type(json["type"].GetString());
-            if ( type == "snapshot" )
+            const char *const type = json["type"].GetString();
+            if ( strcmp(type, "snapshot") == 0 )
             {
                 parseSnapshotHalf(json, "bids", bids);
                 parseSnapshotHalf(json, "asks", offers);
                 m_bookInitialized = true;
             }
-            else if ( type == "l2update" )
+            else if ( strcmp(type, "l2update") == 0 )
             {
                 for (auto i = 0 ; i < json["changes"].Size() ; ++i)
                 {
