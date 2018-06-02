@@ -251,7 +251,10 @@ private:
     }
 
     template<typename map_t>
-    void parseSnapshotHalf(rapidjson::Document const& json, const char* bidsOrOffers, map_t & map)
+    void parseSnapshotHalf(
+        rapidjson::Document const& json,
+        const char *const bidsOrOffers,
+        map_t & map)
     {
         for (auto j = 0 ; j < json[bidsOrOffers].Size() ; ++j)
         {
@@ -263,18 +266,20 @@ private:
     }
 
     template<typename map_t>
-    void parseUpdate(const char* price, const char* size, map_t & map)
+    void parseUpdate(
+        const char *const price,
+        const char *const size,
+        map_t & map)
     {
-        using std::stod;
-        if (stod(size) == 0) { map.erase(stod(price)); }
+        if (std::stod(size) == 0) { map.erase(std::stod(price)); }
         else
         {
             map.update(
-                stod(price),
+                std::stod(price),
                 [size](bool & bNew,
                        std::pair<const Price, Size> & pair)
                 {
-                    pair.second = stod(size);
+                    pair.second = std::stod(size);
                 });
         }
     }
