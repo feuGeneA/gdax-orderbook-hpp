@@ -3,10 +3,10 @@
 
 #include <cstring>
 #include <functional>
+#include <future>
 #include <iostream>
 #include <string>
 
-#include <cds/container/rwqueue.h>
 #include <cds/container/skip_list_map_hp.h>
 #include <cds/gc/hp.h>
 #include <cds/init.h>
@@ -23,24 +23,11 @@
  * levels to order quantities, continually updated in real time via the
  * `level2` channel of the Websocket feed of the GDAX API.
  *
- * Spawns two threads, one to receive updates from the GDAX WebSocket Feed and
- * store them in an internal queue, and another to pull updates out of that
- * queue and store them in the maps.
- *
- * Queue-then-map approach chosen based on the assumption that a queue is
- * faster than a map, so updates can be pulled off the wire as fast as
- * possible, with neither map insertion latency nor map garbage collection
- * slowing down the reception pipeline.  (Future improvement: profile queue
- * usage; if consistently empty, consider going straight from WebSocket to map;
- * if consistenly used, consider allowing configuration of queue size in order
- * to avoid overflow.)
+ * Spawns a separate thread to receive updates from the GDAX WebSocket Feed and
+ * process them into the maps.
  *
  * To ensure high performance, implemented using concurrent data structures
- * from libcds.  The internal queue is a cds::container::RWQueue, whose doc
- * says "The queue has two different locks: one for reading and one for
- * writing. Therefore, one writer and one reader can simultaneously access to
- * the queue."  The use case in this implementation has exactly one reader
- * thread and one writer thread.  The price->quantity maps are instances of
+ * from libcds.  The price->quantity maps are instances of
  * cds::container::SkipListMap, whose doc says it is lock-free.
  */
 class GDAXOrderBook {
@@ -62,11 +49,11 @@ public:
     GDAXOrderBook(std::string const& product = "BTC-USD")
         : m_cdsGarbageCollector(67*2),
             // per SkipListMap doc, 67 hazard pointers per instance
-          receiveUpdatesThread(&GDAXOrderBook::receiveUpdates, this, product),
-          processUpdatesThread(&GDAXOrderBook::processUpdates, this)
+          updateThread(&GDAXOrderBook::handleUpdates, this, product)
     {
         ensureThreadAttached();
 
+        // wait for updateThread to process the initial snapshot
         while ( ! m_bookInitialized ) { continue; }
     }
 
@@ -87,30 +74,10 @@ public:
 
     ~GDAXOrderBook()
     {
-        // tell threads we're terminating, and wait for them to finish
-
+        // tell thread we're terminating, and wait for it to finish
         m_client.stop();
-        receiveUpdatesThread.join();
-
-        m_stopUpdating = true;
-        processUpdatesThread.join();
+        updateThread.join();
     }
-
-private:
-    std::thread processUpdatesThread;
-    std::thread receiveUpdatesThread;
-
-    cds::container::RWQueue<
-        std::string
-#if PROFILE_MAX_QUEUE > 0
-        ,typename cds::container::rwqueue::make_traits<
-            cds::opt::item_counter<cds::atomicity::item_counter>
-        >::type
-#endif
-    > m_queue;
-
-public:
-    size_t getQueueSize() { return m_queue.size(); }
 
 private:
     struct websocketppPolicy
@@ -121,14 +88,20 @@ private:
     using WebSocketClient = websocketpp::client<websocketppPolicy>;
     WebSocketClient m_client;
 
+    bool m_bookInitialized = false;
+
+    std::thread updateThread;
+
     /**
      * Initiates WebSocket connection, subscribes to order book updates for the
      * given product, installs a message handler which will receive updates
-     * and enqueue them to m_queue, and starts the asio event loop.
+     * and process them into the maps, and starts the asio event loop.
      */
-    void receiveUpdates(std::string const& product)
+    void handleUpdates(std::string const& product)
     {
         ensureThreadAttached();
+
+        rapidjson::Document json;
 
         try {
             m_client.clear_access_channels(websocketpp::log::alevel::all);
@@ -146,17 +119,10 @@ private:
             m_client.init_asio();
 
             m_client.set_message_handler(
-                [this](websocketpp::connection_hdl,
-                       websocketppPolicy::message_type::ptr msg)
+                [this, &json] (websocketpp::connection_hdl,
+                               websocketppPolicy::message_type::ptr msg)
                 {
-                    this->m_queue.enqueue(msg->get_payload());
-#if PROFILE_MAX_QUEUE > 0
-                    size_t queueSize = m_queue.size();
-                    if ( queueSize > PROFILE_MAX_QUEUE ) {
-                        std::cerr << queueSize << " updates are waiting to be "
-                            "processed on the internal queue" << std::endl;
-                    }
-#endif
+                    processUpdate(json, msg->get_payload().c_str());
                 });
 
             m_client.set_tls_init_handler(
@@ -209,67 +175,54 @@ private:
 
             m_client.run();
         } catch (websocketpp::exception const & e) {
-            std::cerr << "receiveUpdates() failed: " << e.what() << std::endl;
+            std::cerr << "handleUpdates() failed: " << e.what() << std::endl;
         }
     }
 
-    bool m_stopUpdating = false; // for termination of processUpdates() thread
-    bool m_bookInitialized = false; // to tell constructor to return
-
     /**
-     * Continually dequeues order book updates from `m_queue` (busy-waiting if
-     * there aren't any), and moves those updates to `bids` and `offers`, until
-     * `m_stopUpdating` is true.
+     * Parses updated with json document, and, depending on the type of update
+     * it finds, delegates processing to the appropriate helper function.
      */
-    void processUpdates()
+    void processUpdate(
+        rapidjson::Document & json,
+        const char *const update)
     {
-        ensureThreadAttached();
+        json.Parse(update);
 
-        rapidjson::Document json;
-        std::string update;
-        bool queueEmpty;
-
-        while ( true ) 
+        const char *const type = json["type"].GetString();
+        if ( strcmp(type, "snapshot") == 0 )
         {
-            if ( m_stopUpdating ) return;
-
-            queueEmpty = ! m_queue.dequeue(update);
-            if (queueEmpty) continue;
-
-            json.Parse(update.c_str());
-
-            using std::stod;
-
-            const char *const type = json["type"].GetString();
-            if ( strcmp(type, "snapshot") == 0 )
+            extractSnapshotHalf(json, "bids", bids);
+            extractSnapshotHalf(json, "asks", offers);
+            m_bookInitialized = true;
+        }
+        else if ( strcmp(type, "l2update") == 0 )
+        {
+            for (auto i = 0 ; i < json["changes"].Size() ; ++i)
             {
-                parseSnapshotHalf(json, "bids", bids);
-                parseSnapshotHalf(json, "asks", offers);
-                m_bookInitialized = true;
-            }
-            else if ( strcmp(type, "l2update") == 0 )
-            {
-                for (auto i = 0 ; i < json["changes"].Size() ; ++i)
+                const char* buyOrSell = json["changes"][i][0].GetString(),
+                          * price     = json["changes"][i][1].GetString(),
+                          * size      = json["changes"][i][2].GetString();
+
+                if ( strcmp(buyOrSell, "buy") == 0 )
                 {
-                    const char* buyOrSell = json["changes"][i][0].GetString(),
-                              * price     = json["changes"][i][1].GetString(),
-                              * size      = json["changes"][i][2].GetString();
-
-                    if ( strcmp(buyOrSell, "buy") == 0 )
-                    {
-                        parseUpdate(price, size, bids);
-                    }
-                    else
-                    {
-                        parseUpdate(price, size, offers);
-                    }
+                    updateMap(price, size, bids);
+                }
+                else
+                {
+                    updateMap(price, size, offers);
                 }
             }
         }
     }
 
+    /**
+     * Helper to permit code re-use on either type of map (bids or offers).
+     * Traverses already-parsed json document and inserts initial-price
+     * snapshots for entire half (bids or offers) of the order book.
+     */
     template<typename map_t>
-    void parseSnapshotHalf(
+    void extractSnapshotHalf(
         rapidjson::Document const& json,
         const char *const bidsOrOffers,
         map_t & map)
@@ -283,8 +236,12 @@ private:
         }
     }
 
+    /**
+     * Helper to permit code re-use on either type of map (bids or offers).
+     * Simply updates a single map entry with the specified price/size.
+     */
     template<typename map_t>
-    void parseUpdate(
+    void updateMap(
         const char *const price,
         const char *const size,
         map_t & map)
