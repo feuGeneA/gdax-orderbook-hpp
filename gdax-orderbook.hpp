@@ -97,11 +97,22 @@ public:
     }
 
 private:
-    std::thread receiveUpdatesThread;
     std::thread processUpdatesThread;
+    std::thread receiveUpdatesThread;
 
-    cds::container::RWQueue<std::string> m_queue;
+    cds::container::RWQueue<
+        std::string
+#if PROFILE_MAX_QUEUE > 0
+        ,typename cds::container::rwqueue::make_traits<
+            cds::opt::item_counter<cds::atomicity::item_counter>
+        >::type
+#endif
+    > m_queue;
 
+public:
+    size_t getQueueSize() { return m_queue.size(); }
+
+private:
     struct websocketppPolicy
         : public websocketpp::config::asio_tls_client
         // would prefer transport::iostream instead of transport::asio,
@@ -142,6 +153,13 @@ private:
                        websocketppPolicy::message_type::ptr msg)
                 {
                     this->m_queue.enqueue(msg->get_payload());
+#if PROFILE_MAX_QUEUE > 0
+                    size_t queueSize = m_queue.size();
+                    if ( queueSize > PROFILE_MAX_QUEUE ) {
+                        std::cerr << queueSize << " updates are waiting to be "
+                            "processed on the internal queue" << std::endl;
+                    }
+#endif
                 });
 
             m_client.set_tls_init_handler(
