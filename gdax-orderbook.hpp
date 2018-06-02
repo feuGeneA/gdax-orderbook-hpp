@@ -53,15 +53,19 @@ private:
     cds::gc::HP m_cdsGarbageCollector;
 
 public:
+    static void ensureThreadAttached()
+    {
+        if (cds::threading::Manager::isThreadAttached() == false)
+            cds::threading::Manager::attachThread();
+    }
+
     GDAXOrderBook(const std::string product = "BTC-USD")
         : m_cdsGarbageCollector(67*2),
             // per SkipListMap doc, 67 hazard pointers per instance
           receiveUpdatesThread(&GDAXOrderBook::receiveUpdates, this, product),
           processUpdatesThread(&GDAXOrderBook::processUpdates, this)
     {
-        // allow constructing thread to interact with libcds maps:
-        if (cds::threading::Manager::isThreadAttached() == false)
-            cds::threading::Manager::attachThread();
+        ensureThreadAttached();
 
         while ( ! m_bookInitialized ) { continue; }
     }
@@ -116,8 +120,7 @@ private:
      */
     void receiveUpdates(std::string product)
     {
-        if (cds::threading::Manager::isThreadAttached() == false)
-            cds::threading::Manager::attachThread();
+        ensureThreadAttached();
 
         try {
             m_client.clear_access_channels(websocketpp::log::alevel::all);
@@ -205,8 +208,7 @@ private:
      */
     void processUpdates()
     {
-        if (cds::threading::Manager::isThreadAttached() == false)
-            cds::threading::Manager::attachThread();
+        ensureThreadAttached();
 
         rapidjson::Document json;
         std::string update;
