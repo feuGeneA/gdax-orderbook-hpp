@@ -115,9 +115,6 @@ public:
 private:
     struct websocketppPolicy
         : public websocketpp::config::asio_tls_client
-        // would prefer transport::iostream instead of transport::asio,
-        // because we only have one thread using the WebSocket, but the only
-        // policy preconfigured with TLS support is the asio one.
     {
         typedef websocketpp::concurrency::none concurrency_type;
     };
