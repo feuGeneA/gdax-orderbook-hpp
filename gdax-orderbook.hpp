@@ -63,9 +63,6 @@ public:
         if (cds::threading::Manager::isThreadAttached() == false)
             cds::threading::Manager::attachThread();
 
-        receiveUpdatesThread.detach();
-        processUpdatesThread.detach();
-
         while ( ! m_bookInitialized ) { continue; }
     }
 
@@ -87,13 +84,12 @@ public:
     ~GDAXOrderBook()
     {
         // tell threads we're terminating, and wait for them to finish
-        m_client.stop(); // signal to receiveUpdatesThread
-        m_stopUpdating = true; // signal to processUpdatesThread
-        while ( processUpdatesThread.joinable()
-             && receiveUpdatesThread.joinable() )
-        {
-            continue;
-        }
+
+        m_client.stop();
+        receiveUpdatesThread.join();
+
+        m_stopUpdating = true;
+        processUpdatesThread.join();
     }
 
 private:
