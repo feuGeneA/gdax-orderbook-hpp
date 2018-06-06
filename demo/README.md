@@ -1,17 +1,17 @@
 Sample output:
 
 ```
-[2018-06-04 16:46:24] [connect] Successful connection
-[2018-06-04 16:46:24] [connect] WebSocket Connection 104.16.108.31:443 v-2 "WebSocket++/0.7.0" / 101
-current best bid: Ξ55.117 @ $591.34/Ξ ; current best offer: Ξ2.56101 @ $591.35/Ξ
+[2018-06-06 18:38:28] [connect] Successful connection
+[2018-06-06 18:38:28] [connect] WebSocket Connection 104.16.107.31:443 v-2 "WebSocket++/0.7.0" / 101
+current best bid: Ξ40 @ $604.32/Ξ ; current best offer: Ξ21.0383 @ $604.33/Ξ
 waiting 5 seconds for the market to shift
-current best bid: Ξ28.027 @ $591.34/Ξ ; current best offer: Ξ2.56101 @ $591.35/Ξ
+current best bid: Ξ40.0108 @ $604.32/Ξ ; current best offer: Ξ20.5884 @ $604.33/Ξ
 running for 90 seconds, with 5 threads constantly iterating over the whole order book.
 histogram of times to iterate over the whole book:
   0-  4 ms: *
-  5-  9 ms: ************************************************************
- 10- 14 ms: *********************************************************************
- 15- 19 ms: ****
+  5-  9 ms: *********************************************************************
+ 10- 14 ms: *****************************************************
+ 15- 19 ms: *
  20- 24 ms: 
  25- 29 ms: 
  30- 34 ms: 

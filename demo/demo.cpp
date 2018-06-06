@@ -7,9 +7,9 @@
 void printBestBidAndOffer(GDAXOrderBook & book)
 {
     std::cout << "current best bid: Ξ" << book.bids.begin()->second << " @ $"
-                               << book.bids.begin()->first << "/Ξ ; ";
+                               << book.bids.begin()->first/100.0 << "/Ξ ; ";
     std::cout << "current best offer: Ξ" << book.offers.begin()->second << " @ $"
-                                 << book.offers.begin()->first << "/Ξ"
+                                 << book.offers.begin()->first/100.0 << "/Ξ"
                                  << std::endl;
 }
 

@@ -57,7 +57,7 @@ public:
         while ( ! m_bookInitialized ) { continue; }
     }
 
-    using Price = double;
+    using Price = unsigned int; // cents
     using Size = double;
     using offers_map_t = cds::container::SkipListMap<cds::gc::HP, Price, Size>;
     using bids_map_t =
@@ -229,7 +229,7 @@ private:
     {
         for (auto j = 0 ; j < json[bidsOrOffers].Size() ; ++j)
         {
-            Price price = std::stod(json[bidsOrOffers][j][0].GetString());
+            Price price = std::stod(json[bidsOrOffers][j][0].GetString())*100;
             Size   size = std::stod(json[bidsOrOffers][j][1].GetString());
 
             map.insert(price, size);
@@ -250,7 +250,7 @@ private:
         else
         {
             map.update(
-                std::stod(price),
+                std::stod(price)*100,
                 [size](bool & bNew,
                        std::pair<const Price, Size> & pair)
                 {
