@@ -33,47 +33,48 @@ int main(int argc, char* argv[]) {
     std::cout << "running for " << secondsToSleep << " seconds, with " <<
         numThreads << " threads constantly iterating over the whole order "
         "book." << std::endl;
-    std::vector<std::thread> threads;
     bool keepIterating = true;
-    for (size_t i = 0 ; i < numThreads ; ++i)
     {
-        threads.emplace_back(std::thread([&book,
-                                          &keepIterating,
-                                          &histogram] ()
+        std::vector<std::future<void>> futures;
+        for (size_t i = 0 ; i < numThreads ; ++i)
         {
-            GDAXOrderBook::ensureThreadAttached();
-
-            GDAXOrderBook::bids_map_t::iterator bidIter;
-            GDAXOrderBook::offers_map_t::iterator offerIter;
-            std::chrono::steady_clock::time_point start, finish;
-
-            while(keepIterating == true)
+            futures.emplace_back(
+                std::async(std::launch::async,
+                           [&book, &keepIterating, &histogram] ()
             {
-                start = std::chrono::steady_clock::now();
+                GDAXOrderBook::ensureThreadAttached();
 
-                bidIter = book.bids.begin();
-                while(bidIter != book.bids.end()) { ++bidIter; }
+                GDAXOrderBook::bids_map_t::iterator bidIter;
+                GDAXOrderBook::offers_map_t::iterator offerIter;
+                std::chrono::steady_clock::time_point start, finish;
 
-                offerIter = book.offers.begin();
-                while(offerIter != book.offers.end()) { ++offerIter; }
+                while(keepIterating == true)
+                {
+                    start = std::chrono::steady_clock::now();
 
-                finish = std::chrono::steady_clock::now();
+                    bidIter = book.bids.begin();
+                    while(bidIter != book.bids.end()) { ++bidIter; }
 
-                histogram[
-                    static_cast<size_t>(
-                        std::chrono::duration<double, std::milli>(
-                            std::chrono::steady_clock::now() - start
-                        ).count()/5
-                    )
-                ]++;
-            }
-        }));
+                    offerIter = book.offers.begin();
+                    while(offerIter != book.offers.end()) { ++offerIter; }
+
+                    finish = std::chrono::steady_clock::now();
+
+                    histogram[
+                        static_cast<size_t>(
+                            std::chrono::duration<double, std::milli>(
+                                std::chrono::steady_clock::now() - start
+                            ).count()/5
+                        )
+                    ]++;
+                }
+            }));
+        }
+
+        std::this_thread::sleep_for(std::chrono::seconds(secondsToSleep));
+
+        keepIterating = false;
     }
-
-    std::this_thread::sleep_for(std::chrono::seconds(secondsToSleep));
-
-    keepIterating = false;
-    for (auto & i : threads) { i.join(); }
 
     // find the largest histogram bucket so we can determine the scale factor
     // for all of the buckets

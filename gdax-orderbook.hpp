@@ -49,7 +49,12 @@ public:
     GDAXOrderBook(std::string const& product = "BTC-USD")
         : m_cdsGarbageCollector(67*2),
             // per SkipListMap doc, 67 hazard pointers per instance
-          updateThread(&GDAXOrderBook::handleUpdates, this, product)
+          m_threadTerminator(
+            std::async(
+                std::launch::async,
+                &GDAXOrderBook::handleUpdates,
+                this,
+                product))
     {
         ensureThreadAttached();
 
@@ -72,12 +77,7 @@ public:
     bids_map_t bids;
     offers_map_t offers;
 
-    ~GDAXOrderBook()
-    {
-        // tell thread we're terminating, and wait for it to finish
-        m_client.stop();
-        updateThread.join();
-    }
+    ~GDAXOrderBook() { m_client.stop(); }
 
 private:
     struct websocketppPolicy
@@ -90,7 +90,7 @@ private:
 
     bool m_bookInitialized = false;
 
-    std::thread updateThread;
+    std::future<void> m_threadTerminator;
 
     /**
      * Initiates WebSocket connection, subscribes to order book updates for the
