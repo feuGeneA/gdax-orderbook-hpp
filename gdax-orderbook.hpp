@@ -188,13 +188,7 @@ private:
         json.Parse(update);
 
         const char *const type = json["type"].GetString();
-        if ( strcmp(type, "snapshot") == 0 )
-        {
-            extractSnapshotHalf(json, "bids", bids);
-            extractSnapshotHalf(json, "asks", offers);
-            m_bookInitialized.set_value();
-        }
-        else if ( strcmp(type, "l2update") == 0 )
+        if ( strcmp(type, "l2update") == 0 )
         {
             for (auto i = 0 ; i < json["changes"].Size() ; ++i)
             {
@@ -211,6 +205,12 @@ private:
                     updateMap(price, size, offers);
                 }
             }
+        }
+        else if ( strcmp(type, "snapshot") == 0 )
+        {
+            extractSnapshotHalf(json, "bids", bids);
+            extractSnapshotHalf(json, "asks", offers);
+            m_bookInitialized.set_value();
         }
     }
 
