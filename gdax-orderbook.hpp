@@ -57,9 +57,7 @@ public:
                 product))
     {
         ensureThreadAttached();
-
-        // wait for updateThread to process the initial snapshot
-        while ( ! m_bookInitialized ) { continue; }
+        m_bookInitialized.get_future().wait();
     }
 
     using Price = unsigned int; // cents
@@ -88,7 +86,7 @@ private:
     using WebSocketClient = websocketpp::client<websocketppPolicy>;
     WebSocketClient m_client;
 
-    bool m_bookInitialized = false;
+    std::promise<void> m_bookInitialized;
 
     std::future<void> m_threadTerminator;
 
@@ -194,7 +192,7 @@ private:
         {
             extractSnapshotHalf(json, "bids", bids);
             extractSnapshotHalf(json, "asks", offers);
-            m_bookInitialized = true;
+            m_bookInitialized.set_value();
         }
         else if ( strcmp(type, "l2update") == 0 )
         {
