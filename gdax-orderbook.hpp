@@ -2,7 +2,6 @@
 #define GDAX_ORDERBOOK_HPP
 
 #include <cstring>
-#include <functional>
 #include <future>
 #include <iostream>
 #include <string>
