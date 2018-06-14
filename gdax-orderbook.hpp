@@ -17,10 +17,10 @@
 #include <websocketpp/config/asio_client.hpp>
 
 /**
- * A copy of the GDAX order book for the product given during construction,
- * exposed as two maps, one for bids and one for offers, each mapping price
- * levels to order quantities, continually updated in real time via the
- * `level2` channel of the Websocket feed of the GDAX API.
+ * A copy of the GDAX order book for the currency pair product given during
+ * construction, exposed as two maps, one for bids and one for offers, each
+ * mapping price levels to order quantities, continually updated in real time
+ * via the `level2` channel of the Websocket feed of the GDAX API.
  *
  * Spawns a separate thread to receive updates from the GDAX WebSocket Feed and
  * process them into the maps.
@@ -31,14 +31,23 @@
  */
 class GDAXOrderBook {
 private:
+    // libcds requires paired Initialize/Terminate calls
     struct CDSInitializer {
         CDSInitializer() { cds::Initialize(); }
         ~CDSInitializer() { cds::Terminate(); }
     } m_cdsInitializer;
 
+    // a libcds garbage collector is required for our map structures
     cds::gc::HP m_cdsGarbageCollector;
 
 public:
+    /**
+     * libcds requires each and every thread to first "attach" itself to the
+     * lib before using any data structures. This method is used internally,
+     * and is called during construction on behalf of the constructing thread,
+     * and should be called by any additional client threads that access the
+     * price->quanitity maps.
+     */
     static void ensureThreadAttached()
     {
         if (cds::threading::Manager::isThreadAttached() == false)
@@ -77,17 +86,18 @@ public:
     ~GDAXOrderBook() { m_client.stop(); }
 
 private:
-    struct websocketppPolicy
+    struct websocketppConfig
         : public websocketpp::config::asio_tls_client
     {
         typedef websocketpp::concurrency::none concurrency_type;
+            // we only have one thread using the WebSocket
     };
-    using WebSocketClient = websocketpp::client<websocketppPolicy>;
-    WebSocketClient m_client;
+    using websocketclient_t = websocketpp::client<websocketppConfig>;
+    websocketclient_t m_client;
 
-    std::promise<void> m_bookInitialized;
+    std::promise<void> m_bookInitialized; // to signal constructor to finish
 
-    std::future<void> m_threadTerminator;
+    std::future<void> m_threadTerminator; // for graceful thread destruction
 
     /**
      * Initiates WebSocket connection, subscribes to order book updates for the
@@ -117,7 +127,7 @@ private:
 
             m_client.set_message_handler(
                 [this, &json] (websocketpp::connection_hdl,
-                               websocketppPolicy::message_type::ptr msg)
+                               websocketppConfig::message_type::ptr msg)
                 {
                     json.Parse(msg->get_payload().c_str());
                     const char *const type = json["type"].GetString();
@@ -153,7 +163,7 @@ private:
                 });
 
             m_client.set_open_handler(
-                [&product, this](websocketpp::connection_hdl handle)
+                [this, &product](websocketpp::connection_hdl handle)
                 {
                     // subscribe to updates to product's order book
                     websocketpp::lib::error_code errorCode;
@@ -173,7 +183,7 @@ private:
             auto connection =
                 m_client.get_connection("wss://ws-feed.gdax.com", errorCode);
             if (errorCode) {
-                std::cerr << "failed WebSocketClient::get_connection(): " <<
+                std::cerr << "failed websocketclient_t::get_connection(): " <<
                     errorCode.message() << std::endl;
             }
 
@@ -196,8 +206,8 @@ private:
         offers_map_t & offers,
         std::promise<void> & finished)
     {
-        extractSnapshotHalf(json, "bids", bids);
-        extractSnapshotHalf(json, "asks", offers);
+        processSnapshotHalf(json, "bids", bids);
+        processSnapshotHalf(json, "asks", offers);
         finished.set_value();
     }
 
@@ -207,7 +217,7 @@ private:
      * snapshots for entire half (bids or offers) of the order book.
      */
     template<typename map_t>
-    static void extractSnapshotHalf(
+    static void processSnapshotHalf(
         rapidjson::Document const& json,
         const char *const bidsOrOffers,
         map_t & map)
