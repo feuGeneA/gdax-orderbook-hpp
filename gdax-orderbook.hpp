@@ -125,22 +125,6 @@ private:
 
             m_client.init_asio();
 
-            m_client.set_message_handler(
-                [this, &json] (websocketpp::connection_hdl,
-                               websocketppConfig::message_type::ptr msg)
-                {
-                    json.Parse(msg->get_payload().c_str());
-                    const char *const type = json["type"].GetString();
-                    if ( strcmp(type, "l2update") == 0 )
-                    {
-                        processUpdates(json, bids, offers);
-                    }
-                    else if ( strcmp(type, "snapshot") == 0 )
-                    {
-                        processSnapshot(json, bids, offers, m_bookInitialized);
-                    }
-                });
-
             m_client.set_tls_init_handler(
                 [](websocketpp::connection_hdl)
                 {
@@ -176,6 +160,22 @@ private:
                     if (errorCode) {
                         std::cerr << "error sending subscription: " +
                             errorCode.message() << std::endl;
+                    }
+                });
+
+            m_client.set_message_handler(
+                [this, &json] (websocketpp::connection_hdl,
+                               websocketppConfig::message_type::ptr msg)
+                {
+                    json.Parse(msg->get_payload().c_str());
+                    const char *const type = json["type"].GetString();
+                    if ( strcmp(type, "l2update") == 0 )
+                    {
+                        processUpdates(json, bids, offers);
+                    }
+                    else if ( strcmp(type, "snapshot") == 0 )
+                    {
+                        processSnapshot(json, bids, offers, m_bookInitialized);
                     }
                 });
 
