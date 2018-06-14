@@ -119,7 +119,16 @@ private:
                 [this, &json] (websocketpp::connection_hdl,
                                websocketppPolicy::message_type::ptr msg)
                 {
-                    processUpdate(json, msg->get_payload().c_str());
+                    json.Parse(msg->get_payload().c_str());
+                    const char *const type = json["type"].GetString();
+                    if ( strcmp(type, "l2update") == 0 )
+                    {
+                        processUpdates(json, bids, offers);
+                    }
+                    else if ( strcmp(type, "snapshot") == 0 )
+                    {
+                        processSnapshot(json, bids, offers, m_bookInitialized);
+                    }
                 });
 
             m_client.set_tls_init_handler(
@@ -177,40 +186,19 @@ private:
     }
 
     /**
-     * Parses updated with json document, and, depending on the type of update
-     * it finds, delegates processing to the appropriate helper function.
+     * Simply delegates snapshot processing to a helper function (different
+     * template instantiations of the same function, one for each type of map
+     * (bid, offer)), and signals when the snapshot has been processed.
      */
-    void processUpdate(
+    static void processSnapshot(
         rapidjson::Document & json,
-        const char *const update)
+        bids_map_t & bids,
+        offers_map_t & offers,
+        std::promise<void> & finished)
     {
-        json.Parse(update);
-
-        const char *const type = json["type"].GetString();
-        if ( strcmp(type, "l2update") == 0 )
-        {
-            for (auto i = 0 ; i < json["changes"].Size() ; ++i)
-            {
-                const char* buyOrSell = json["changes"][i][0].GetString(),
-                          * price     = json["changes"][i][1].GetString(),
-                          * size      = json["changes"][i][2].GetString();
-
-                if ( strcmp(buyOrSell, "buy") == 0 )
-                {
-                    updateMap(price, size, bids);
-                }
-                else
-                {
-                    updateMap(price, size, offers);
-                }
-            }
-        }
-        else if ( strcmp(type, "snapshot") == 0 )
-        {
-            extractSnapshotHalf(json, "bids", bids);
-            extractSnapshotHalf(json, "asks", offers);
-            m_bookInitialized.set_value();
-        }
+        extractSnapshotHalf(json, "bids", bids);
+        extractSnapshotHalf(json, "asks", offers);
+        finished.set_value();
     }
 
     /**
@@ -219,7 +207,7 @@ private:
      * snapshots for entire half (bids or offers) of the order book.
      */
     template<typename map_t>
-    void extractSnapshotHalf(
+    static void extractSnapshotHalf(
         rapidjson::Document const& json,
         const char *const bidsOrOffers,
         map_t & map)
@@ -234,11 +222,38 @@ private:
     }
 
     /**
+     * Traverses already-parsed json document, and, assuming it's a "l2update"
+     * document, updates price->quantity maps based on the order book changes
+     * that have occurred.
+     */
+    static void processUpdates(
+        rapidjson::Document & json,
+        bids_map_t & bids,
+        offers_map_t & offers)
+    {
+        for (auto i = 0 ; i < json["changes"].Size() ; ++i)
+        {
+            const char* buyOrSell = json["changes"][i][0].GetString(),
+                      * price     = json["changes"][i][1].GetString(),
+                      * size      = json["changes"][i][2].GetString();
+
+            if ( strcmp(buyOrSell, "buy") == 0 )
+            {
+                updateMap(price, size, bids);
+            }
+            else
+            {
+                updateMap(price, size, offers);
+            }
+        }
+    }
+
+    /**
      * Helper to permit code re-use on either type of map (bids or offers).
      * Simply updates a single map entry with the specified price/size.
      */
     template<typename map_t>
-    void updateMap(
+    static void updateMap(
         const char *const price,
         const char *const size,
         map_t & map)
